@@ -3,19 +3,39 @@ import uuid
 import json
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, get_db
+from auth import is_valid_session, COOKIE_NAME
+from console_api import router as console_auth_router, protected as console_router
 
 app = FastAPI(title="Editor Tracker Server")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
 
 init_db()
+
+app.include_router(console_auth_router)
+app.include_router(console_router)
+
+
+@app.get("/")
+def console_page(request: Request):
+    if not is_valid_session(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/login")
+    return FileResponse(os.path.join(STATIC_DIR, "console.html"))
+
+
+@app.get("/login")
+def login_page(request: Request):
+    if is_valid_session(request.cookies.get(COOKIE_NAME)):
+        return RedirectResponse("/")
+    return FileResponse(os.path.join(STATIC_DIR, "login.html"))
 
 
 @app.post("/api/register")

@@ -1,14 +1,39 @@
-# Editor Tracker
+# Editor Tracker + Studio Console
 
-A real-time tracking system for video editors. Monitors active applications, idle time, and captures periodic screenshots. View everything on a live dashboard.
+A real-time tracking system for video editors, plus a web dashboard (**Studio Console**) to run the whole agency: tasks per client, an income/expense ledger in ₹, and attendance derived automatically from tracker activity.
 
 ## Architecture
 
 ```
-[Editor's Laptop]          [Your Server (VPS)]         [Your Machine]
- tracker.py  ──────────►   server/main.py   ◄──────── dashboard.py
- (Windows)                 (FastAPI + SQLite)          (Desktop GUI)
+[Editor's Laptop]          [Your Server (VPS)]         [Your Browser / Machine]
+ tracker.py  ──────────►   server/main.py   ◄──────── Studio Console (web, /)
+ (Windows)                 (FastAPI + SQLite)  ◄────── dashboard.py (Desktop GUI)
 ```
+
+## Studio Console
+
+Open `http://YOUR_SERVER_IP:8000/` in a browser and sign in with the admin
+password. Four tabs:
+
+- **Overview** — who's present today, tasks in motion, overdue count, this month's net
+- **Tasks** — grouped by client → project, with assignee, status, priority, due date and a footage/asset link. Overdue tasks are flagged automatically
+- **Expenses** — income + expense ledger with monthly summary, a 6-month chart, recurring expenses (weekly/monthly/yearly auto-repeat) and invoice status (Draft → Sent → Paid, overdue flagged)
+- **Team** — attendance read automatically from tracker activity: first/last seen, active vs idle time, and a 14-day presence grid. No clock-in needed
+
+### Admin password
+
+Set it once when starting the server (defaults to `studio123` — change it):
+
+```bash
+ADMIN_PASSWORD=your-secret-here python main.py
+```
+
+An editor counts as **present** after 60 minutes of active (non-idle) tracker
+time in a day. Override with `PRESENT_THRESHOLD_MIN=45`.
+
+The database is seeded with a few example clients, editors, tasks and ledger
+entries on first run so the console isn't empty — delete them from the UI and
+add your real ones.
 
 ## Setup
 

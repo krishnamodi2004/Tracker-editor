@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.db
 server/screenshots/
+server/.console_secret

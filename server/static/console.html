@@ -223,6 +223,7 @@
   dialog{
     background:var(--surface); color:var(--text-hi); border:1px solid var(--hairline);
     border-radius:12px; padding:0; width:min(430px, calc(100vw - 2rem));
+    max-height:calc(100vh - 2rem); overflow-y:auto;
   }
   dialog::backdrop{background:rgba(10,12,14,0.7)}
   .dlg-head{display:flex; justify-content:space-between; align-items:center; padding:1rem 1.3rem; border-bottom:1px solid var(--hairline);}
@@ -378,7 +379,7 @@
         <div class="fld"><label for="iAmount">Amount (₹)</label><input id="iAmount" type="number" min="0.01" step="0.01" required></div>
         <div class="fld"><label for="iStatus">Status</label>
           <select id="iStatus">
-            <option value="draft">Draft</option><option value="sent" selected>Sent</option><option value="paid">Paid</option>
+            <option value="draft">Draft</option><option value="sent" selected>Received</option><option value="paid">Paid</option>
           </select>
         </div>
       </div>
@@ -545,7 +546,7 @@ async function renderOverview() {
       </ul>` : `<div class="empty"><b>All clear</b>Nothing urgent, nothing overdue.</div>`}
     </div>
     ${ov.money.pending_invoices ? `<div class="card"><div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
-      <span style="font-size:0.88rem;color:var(--text-mid)">Invoices sent &amp; awaiting payment</span>
+      <span style="font-size:0.88rem;color:var(--text-mid)">Invoices received &amp; awaiting payment</span>
       <span class="mono" style="font-family:var(--mono);font-size:1.05rem;color:var(--warn)">${rupees(ov.money.pending_invoices)}</span>
     </div></div>` : ''}
   `;
@@ -766,7 +767,7 @@ async function renderLedger() {
         <div class="tv ${s.net>=0?'pos':'neg'}">${s.net>=0?'+':'−'}${rupees(Math.abs(s.net))}</div></div>
       <div class="tile"><div class="tl">Awaiting payment</div>
         <div class="tv" style="color:var(--warn)">${rupees(s.pending_invoices)}</div>
-        <div class="ts">all invoices marked “sent”</div></div>
+        <div class="ts">all invoices marked “received”</div></div>
     </div>
     <div class="card">
       <div class="card-head"><h2>Last 6 months</h2><span class="meta">invoiced vs spent</span></div>
@@ -817,7 +818,7 @@ function ledgerRow(r) {
       ? '<span class="pill p-overdue"><span class="dot"></span>Overdue</span>'
       : `<select class="pill-select p-${r.status}" data-act="istatus" aria-label="Invoice status">
           <option value="draft" ${r.status==='draft'?'selected':''}>Draft</option>
-          <option value="sent" ${r.status==='sent'?'selected':''}>Sent</option>
+          <option value="sent" ${r.status==='sent'?'selected':''}>Received</option>
           <option value="paid" ${r.status==='paid'?'selected':''}>Paid</option>
         </select>`;
     return `<tr data-id="${r.id}" data-type="income">

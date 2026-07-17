@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Studio Console</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='4' fill='%2314171b'/%3E%3Ccircle cx='8' cy='8' r='4' fill='%232bb3a0'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --ink:#14171b; --surface:#1b1f24; --raised:#22272d; --hover:#272d34;
+    --hairline:#2c333a;
+    --teal:#2bb3a0; --teal-dim:#1f8577; --orange:#e2793d;
+    --text-hi:#ecedf0; --text-mid:#98a1ab; --text-low:#5f6870;
+    --good:#4fae73; --warn:#dba53c; --crit:#dd5f55;
+    --series-income:#22a893; --series-expense:#d56a2e;
+    --mono:ui-monospace,"SF Mono","Cascadia Code",Consolas,"Liberation Mono",monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--ink); color:var(--text-hi); font-family:var(--sans);
+    line-height:1.55; -webkit-font-smoothing:antialiased; min-height:100vh;
+  }
+  @media (prefers-reduced-motion: reduce){ *{transition-duration:0.001ms !important; animation-duration:0.001ms !important;} }
+  a{color:var(--teal); text-decoration:none}
+  a:hover{text-decoration:underline}
+  button{font-family:inherit}
+  :focus-visible{outline:2px solid var(--teal); outline-offset:2px; border-radius:3px;}
+  ::selection{background:var(--teal-dim); color:#fff}
+
+  .app{display:grid; grid-template-columns:212px minmax(0,1fr); min-height:100vh;}
+  @media (max-width:900px){ .app{grid-template-columns:1fr} }
+
+  /* ---- sidebar ---- */
+  aside{
+    border-right:1px solid var(--hairline); padding:1.6rem 1rem;
+    position:sticky; top:0; height:100vh; display:flex; flex-direction:column; gap:0.2rem;
+  }
+  @media (max-width:900px){
+    aside{position:static; height:auto; flex-direction:row; align-items:center; flex-wrap:wrap;
+          border-right:none; border-bottom:1px solid var(--hairline); padding:0.9rem 1rem;}
+  }
+  .brand{
+    font-family:var(--mono); font-size:0.66rem; letter-spacing:0.13em; text-transform:uppercase;
+    color:var(--text-low); padding:0 0.6rem; margin-bottom:1.4rem;
+  }
+  .brand b{color:var(--teal); display:block; font-size:0.88rem; letter-spacing:0.08em; margin-bottom:0.2rem;}
+  @media (max-width:900px){ .brand{margin:0 1rem 0 0} }
+  nav{display:flex; flex-direction:column; gap:2px; flex:1;}
+  @media (max-width:900px){ nav{flex-direction:row} }
+  nav a{
+    display:flex; align-items:center; gap:0.65rem; padding:0.52rem 0.6rem; border-radius:7px;
+    color:var(--text-mid); font-size:0.88rem; transition:background .12s ease,color .12s ease;
+  }
+  nav a:hover{background:var(--surface); color:var(--text-hi); text-decoration:none;}
+  nav a.active{background:var(--raised); color:var(--text-hi);}
+  nav a.active .nv{color:var(--teal)}
+  nav a .nv{font-family:var(--mono); font-size:0.7rem; color:var(--text-low); width:2.1em;}
+  .side-foot{padding:0 0.6rem}
+  .side-foot button{
+    background:none; border:1px solid var(--hairline); color:var(--text-low); width:100%;
+    font-family:var(--mono); font-size:0.68rem; letter-spacing:0.08em; text-transform:uppercase;
+    padding:0.45rem; border-radius:7px; cursor:pointer;
+  }
+  .side-foot button:hover{color:var(--text-mid); border-color:var(--text-low)}
+  @media (max-width:900px){ .side-foot{padding:0} .side-foot button{width:auto; padding:0.45rem 0.8rem} }
+
+  /* ---- main ---- */
+  main{padding:2.1rem clamp(1rem,3.4vw,2.8rem) 4rem; min-width:0;}
+  .page-head{display:flex; align-items:flex-end; justify-content:space-between; gap:1rem; flex-wrap:wrap; margin-bottom:1.6rem;}
+  .kicker{font-family:var(--mono); font-size:0.68rem; letter-spacing:0.13em; text-transform:uppercase; color:var(--orange); margin:0 0 0.4rem;}
+  h1{font-family:var(--mono); font-weight:600; font-size:1.45rem; letter-spacing:-0.01em; margin:0;}
+  .head-actions{display:flex; gap:0.6rem; flex-wrap:wrap}
+
+  .btn{
+    display:inline-flex; align-items:center; gap:0.45rem; cursor:pointer;
+    background:var(--teal-dim); color:#fff; border:none; border-radius:8px;
+    font-family:var(--mono); font-size:0.74rem; letter-spacing:0.06em; text-transform:uppercase;
+    padding:0.52rem 0.9rem; transition:background .12s ease;
+  }
+  .btn:hover{background:var(--teal)}
+  .btn.ghost{background:transparent; border:1px solid var(--hairline); color:var(--text-mid);}
+  .btn.ghost:hover{border-color:var(--text-low); color:var(--text-hi); background:var(--surface)}
+  .btn.danger{background:transparent; border:1px solid rgba(221,95,85,0.4); color:var(--crit)}
+  .btn.danger:hover{background:rgba(221,95,85,0.1)}
+
+  /* ---- cards / tiles ---- */
+  .tiles{display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:0.9rem; margin-bottom:1.5rem;}
+  .tile{background:var(--surface); border:1px solid var(--hairline); border-radius:10px; padding:1rem 1.1rem;}
+  .tile .tl{font-family:var(--mono); font-size:0.64rem; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-low); margin-bottom:0.5rem;}
+  .tile .tv{font-family:var(--mono); font-size:1.5rem; font-weight:600; letter-spacing:-0.01em; line-height:1.1;}
+  .tile .ts{font-size:0.76rem; color:var(--text-mid); margin-top:0.35rem;}
+  .tv.pos{color:var(--good)} .tv.neg{color:var(--crit)}
+
+  .card{background:var(--surface); border:1px solid var(--hairline); border-radius:10px; overflow:hidden; margin-bottom:1.4rem;}
+  .card-head{
+    display:flex; align-items:center; justify-content:space-between; gap:0.8rem;
+    padding:0.75rem 1.1rem; border-bottom:1px solid var(--hairline);
+  }
+  .card-head h2{font-family:var(--mono); font-size:0.8rem; font-weight:600; letter-spacing:0.05em; margin:0; color:var(--text-hi);}
+  .card-head .meta{font-family:var(--mono); font-size:0.7rem; color:var(--text-low);}
+  .card-body{overflow-x:auto}
+  .card-pad{padding:1.1rem}
+
+  table{width:100%; border-collapse:collapse; font-size:0.86rem; min-width:560px;}
+  th{
+    text-align:left; font-family:var(--mono); font-size:0.63rem; text-transform:uppercase;
+    letter-spacing:0.07em; color:var(--text-low); font-weight:500;
+    padding:0.6rem 1rem; border-bottom:1px solid var(--hairline); white-space:nowrap;
+  }
+  td{padding:0.6rem 1rem; border-bottom:1px solid var(--hairline); color:#d3d7db; vertical-align:middle;}
+  tr:last-child td{border-bottom:none}
+  tbody tr{transition:background .1s ease}
+  tbody tr:hover{background:var(--hover)}
+  td.num,th.num{text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap;}
+  td.mono{font-family:var(--mono); font-variant-numeric:tabular-nums; white-space:nowrap; font-size:0.8rem;}
+  .cell-main{color:var(--text-hi)}
+  .cell-sub{font-size:0.74rem; color:var(--text-low); margin-top:1px;}
+
+  .row-actions{display:flex; gap:0.3rem; justify-content:flex-end; opacity:0; transition:opacity .12s ease;}
+  tbody tr:hover .row-actions, tbody tr:focus-within .row-actions{opacity:1}
+  .icon-btn{
+    background:none; border:none; color:var(--text-low); cursor:pointer; border-radius:5px;
+    padding:0.2rem 0.35rem; font-size:0.85rem; line-height:1;
+  }
+  .icon-btn:hover{color:var(--text-hi); background:var(--raised)}
+  .icon-btn.del:hover{color:var(--crit)}
+
+  /* ---- pills ---- */
+  .pill{
+    display:inline-flex; align-items:center; gap:0.35rem; font-family:var(--mono);
+    font-size:0.68rem; padding:0.14rem 0.55rem; border-radius:99px; white-space:nowrap; border:none;
+  }
+  .pill .dot{width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0;}
+  .pill.p-present,.pill.p-paid,.pill.p-online{background:rgba(79,174,115,0.12); color:var(--good)}
+  .pill.p-absent,.pill.p-overdue{background:rgba(221,95,85,0.13); color:var(--crit)}
+  .pill.p-progress{background:rgba(43,179,160,0.12); color:var(--teal)}
+  .pill.p-review,.pill.p-sent{background:rgba(219,165,60,0.14); color:var(--warn)}
+  .pill.p-done,.pill.p-todo,.pill.p-draft,.pill.p-offline{background:rgba(95,104,112,0.18); color:var(--text-mid)}
+  .pill.p-recurring{background:rgba(226,121,61,0.13); color:var(--orange)}
+
+  select.pill-select{
+    appearance:none; -webkit-appearance:none; cursor:pointer; font-family:var(--mono);
+    font-size:0.68rem; padding:0.2rem 1.35rem 0.2rem 0.6rem; border-radius:99px; border:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%2398a1ab'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 0.5rem center;
+  }
+  select.pill-select.p-todo{background-color:rgba(95,104,112,0.18); color:var(--text-mid)}
+  select.pill-select.p-progress{background-color:rgba(43,179,160,0.12); color:var(--teal)}
+  select.pill-select.p-review{background-color:rgba(219,165,60,0.14); color:var(--warn)}
+  select.pill-select.p-done{background-color:rgba(79,174,115,0.12); color:var(--good)}
+  select.pill-select.p-draft{background-color:rgba(95,104,112,0.18); color:var(--text-mid)}
+  select.pill-select.p-sent{background-color:rgba(219,165,60,0.14); color:var(--warn)}
+  select.pill-select.p-paid{background-color:rgba(79,174,115,0.12); color:var(--good)}
+  select.pill-select option{background:var(--raised); color:var(--text-hi)}
+
+  .prio{font-family:var(--mono); font-size:0.68rem; white-space:nowrap;}
+  .prio::before{content:"■ "; font-size:0.6rem;}
+  .prio.low{color:var(--text-low)} .prio.medium{color:var(--text-mid)}
+  .prio.high{color:var(--warn)} .prio.urgent{color:var(--crit)}
+
+  .due-overdue{color:var(--crit); font-weight:600}
+
+  /* ---- filters ---- */
+  .filters{display:flex; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem;}
+  .filters select{
+    background:var(--surface); border:1px solid var(--hairline); color:var(--text-mid);
+    border-radius:8px; font-size:0.8rem; padding:0.42rem 0.7rem; font-family:var(--sans); cursor:pointer;
+  }
+  .filters select:hover{border-color:var(--text-low); color:var(--text-hi)}
+
+  .client-group-head{
+    font-family:var(--mono); font-size:0.72rem; letter-spacing:0.09em; text-transform:uppercase;
+    color:var(--teal); margin:1.6rem 0 0.6rem; display:flex; align-items:baseline; gap:0.6rem;
+  }
+  .client-group-head:first-of-type{margin-top:0.2rem}
+  .client-group-head .cnt{color:var(--text-low); letter-spacing:0;}
+
+  /* ---- month nav ---- */
+  .month-nav{display:flex; align-items:center; gap:0.4rem;}
+  .month-nav button{
+    background:var(--surface); border:1px solid var(--hairline); color:var(--text-mid);
+    border-radius:7px; cursor:pointer; padding:0.3rem 0.6rem; font-size:0.85rem;
+  }
+  .month-nav button:hover{color:var(--text-hi); border-color:var(--text-low)}
+  .month-nav .cur{font-family:var(--mono); font-size:0.82rem; min-width:8.5ch; text-align:center;}
+
+  /* ---- chart ---- */
+  .chart-wrap{padding:1rem 1.1rem 0.6rem; position:relative;}
+  .legend{display:flex; gap:1.1rem; padding:0 1.1rem 0.4rem; font-size:0.76rem; color:var(--text-mid);}
+  .legend span{display:inline-flex; align-items:center; gap:0.4rem;}
+  .legend i{width:10px; height:10px; border-radius:3px; display:inline-block;}
+  .tooltip{
+    position:absolute; pointer-events:none; background:var(--raised); border:1px solid var(--hairline);
+    border-radius:7px; padding:0.45rem 0.65rem; font-size:0.76rem; display:none; z-index:5;
+    box-shadow:0 4px 16px rgba(0,0,0,0.4); white-space:nowrap;
+  }
+  .tooltip .tt-m{font-family:var(--mono); font-size:0.66rem; color:var(--text-low); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:0.2rem;}
+  .tooltip .tt-r{display:flex; justify-content:space-between; gap:0.9rem; font-variant-numeric:tabular-nums;}
+  .tooltip .tt-r i{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:0.35rem}
+
+  /* ---- presence grid ---- */
+  .pgrid td{padding:0.45rem 1rem}
+  .pdots{display:flex; gap:5px}
+  .pdot{width:11px; height:11px; border-radius:50%; background:var(--raised); border:1px solid var(--hairline);}
+  .pdot.on{background:var(--teal-dim); border-color:var(--teal-dim)}
+  .pdot.today{outline:1px solid var(--text-low); outline-offset:1px;}
+
+  /* ---- empty state ---- */
+  .empty{
+    padding:2.2rem 1.5rem; text-align:center; color:var(--text-low); font-size:0.88rem;
+  }
+  .empty b{display:block; color:var(--text-mid); font-family:var(--mono); font-size:0.8rem; margin-bottom:0.3rem;}
+
+  /* ---- attention list ---- */
+  .att-list{list-style:none; margin:0; padding:0.3rem 0;}
+  .att-list li{display:flex; align-items:center; gap:0.8rem; padding:0.55rem 1.1rem; border-bottom:1px solid var(--hairline); font-size:0.86rem;}
+  .att-list li:last-child{border-bottom:none}
+  .att-list .who{margin-left:auto; color:var(--text-low); font-size:0.78rem; white-space:nowrap;}
+
+  /* ---- dialogs ---- */
+  dialog{
+    background:var(--surface); color:var(--text-hi); border:1px solid var(--hairline);
+    border-radius:12px; padding:0; width:min(430px, calc(100vw - 2rem));
+    max-height:calc(100vh - 2rem); overflow-y:auto;
+  }
+  dialog::backdrop{background:rgba(10,12,14,0.7)}
+  .dlg-head{display:flex; justify-content:space-between; align-items:center; padding:1rem 1.3rem; border-bottom:1px solid var(--hairline);}
+  .dlg-head h3{font-family:var(--mono); font-size:0.85rem; margin:0; letter-spacing:0.04em;}
+  .dlg-body{padding:1.1rem 1.3rem 1.4rem; display:flex; flex-direction:column; gap:0.85rem;}
+  .fld label{display:block; font-family:var(--mono); font-size:0.64rem; text-transform:uppercase; letter-spacing:0.09em; color:var(--text-low); margin-bottom:0.35rem;}
+  .fld input,.fld select,.fld textarea{
+    width:100%; background:var(--raised); border:1px solid var(--hairline); border-radius:8px;
+    color:var(--text-hi); font-size:0.88rem; padding:0.5rem 0.7rem; font-family:var(--sans);
+  }
+  .fld textarea{resize:vertical; min-height:60px}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{outline:2px solid var(--teal); outline-offset:1px;}
+  .fld-row{display:grid; grid-template-columns:1fr 1fr; gap:0.85rem;}
+  .dlg-foot{display:flex; justify-content:flex-end; gap:0.6rem; padding-top:0.4rem;}
+
+  /* ---- toast ---- */
+  #toast{
+    position:fixed; bottom:1.4rem; left:50%; transform:translateX(-50%) translateY(140%);
+    background:var(--raised); border:1px solid var(--hairline); color:var(--text-hi);
+    border-radius:9px; padding:0.6rem 1.1rem; font-size:0.85rem; z-index:60;
+    transition:transform .22s ease; box-shadow:0 6px 24px rgba(0,0,0,0.45); max-width:88vw;
+  }
+  #toast.show{transform:translateX(-50%) translateY(0)}
+  #toast.err{border-color:rgba(221,95,85,0.5); color:#f0b9b4}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><b>Studio Console</b>agency ops</div>
+    <nav id="nav">
+      <a href="#/overview" data-view="overview"><span class="nv">00</span>Overview</a>
+      <a href="#/tasks" data-view="tasks"><span class="nv">01</span>Tasks</a>
+      <a href="#/ledger" data-view="ledger"><span class="nv">02</span>Expenses</a>
+      <a href="#/team" data-view="team"><span class="nv">03</span>Team</a>
+      <a href="#/productivity" data-view="productivity"><span class="nv">04</span>Productivity</a>
+    </nav>
+    <div class="side-foot"><button id="logoutBtn" type="button">Sign out</button></div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<div id="toast" role="status"></div>
+
+<!-- dialogs -->
+<dialog id="dlgTask">
+  <form method="dialog" id="formTask">
+    <div class="dlg-head"><h3 id="dlgTaskTitle">New task</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="tTitle">Title</label><input id="tTitle" required></div>
+      <div class="fld"><label for="tProject">Project</label><select id="tProject" required></select></div>
+      <div class="fld-row">
+        <div class="fld"><label for="tAssignee">Assignee</label><select id="tAssignee"></select></div>
+        <div class="fld"><label for="tPriority">Priority</label>
+          <select id="tPriority">
+            <option value="low">Low</option><option value="medium" selected>Medium</option>
+            <option value="high">High</option><option value="urgent">Urgent</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label for="tDue">Due date</label><input id="tDue" type="date"></div>
+        <div class="fld"><label for="tStatus">Status</label>
+          <select id="tStatus">
+            <option value="todo">To do</option><option value="in_progress">In progress</option>
+            <option value="review">Review</option><option value="delivered">Delivered</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld"><label for="tLink">Footage / asset link</label><input id="tLink" type="url" placeholder="https://drive.google.com/…"></div>
+      <div class="fld"><label for="tDesc">Notes</label><textarea id="tDesc"></textarea></div>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit" id="dlgTaskSubmit">Add task</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgClient">
+  <form method="dialog" id="formClient">
+    <div class="dlg-head"><h3>New client</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="cName">Client name</label><input id="cName" required></div>
+      <div class="fld"><label for="cContact">Contact (email / phone)</label><input id="cContact"></div>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Add client</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgProject">
+  <form method="dialog" id="formProject">
+    <div class="dlg-head"><h3>New project</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="pClient">Client</label><select id="pClient" required></select></div>
+      <div class="fld"><label for="pName">Project name</label><input id="pName" required placeholder="Monthly Reels"></div>
+      <div class="fld"><label for="pPlatform">Platform / deliverable</label><input id="pPlatform" placeholder="Instagram, YouTube, Ads…"></div>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Add project</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgExpense">
+  <form method="dialog" id="formExpense">
+    <div class="dlg-head"><h3>New expense</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="ePayee">Paid to</label><input id="ePayee" required placeholder="Adobe, rent, freelancer…"></div>
+      <div class="fld-row">
+        <div class="fld"><label for="eAmount">Amount (₹)</label><input id="eAmount" type="number" min="0.01" step="0.01" required></div>
+        <div class="fld"><label for="eDate">Date</label><input id="eDate" type="date" required></div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label for="eCategory">Category</label>
+          <select id="eCategory">
+            <option value="software">Software &amp; tools</option>
+            <option value="salaries">Salaries &amp; freelancers</option>
+            <option value="equipment">Equipment</option>
+            <option value="rent">Rent &amp; utilities</option>
+            <option value="marketing">Marketing</option>
+            <option value="misc">Misc</option>
+          </select>
+        </div>
+        <div class="fld"><label for="eRecurring">Repeats</label>
+          <select id="eRecurring">
+            <option value="">Never (one-off)</option>
+            <option value="weekly">Every week</option>
+            <option value="monthly">Every month</option>
+            <option value="yearly">Every year</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld"><label for="eNotes">Notes</label><input id="eNotes"></div>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Add expense</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgIncome">
+  <form method="dialog" id="formIncome">
+    <div class="dlg-head"><h3>New income / invoice</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="iClient">Client</label><select id="iClient" required></select></div>
+      <div class="fld"><label for="iDesc">Description</label><input id="iDesc" placeholder="Monthly retainer — July"></div>
+      <div class="fld-row">
+        <div class="fld"><label for="iAmount">Amount (₹)</label><input id="iAmount" type="number" min="0.01" step="0.01" required></div>
+        <div class="fld"><label for="iStatus">Status</label>
+          <select id="iStatus">
+            <option value="draft">Draft</option><option value="sent" selected>Received</option><option value="paid">Paid</option>
+          </select>
+        </div>
+      </div>
+      <div class="fld-row">
+        <div class="fld"><label for="iInvDate">Invoice date</label><input id="iInvDate" type="date" required></div>
+        <div class="fld"><label for="iDueDate">Payment due</label><input id="iDueDate" type="date"></div>
+      </div>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Add income</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgEditor">
+  <form method="dialog" id="formEditor">
+    <div class="dlg-head"><h3>Add team member</h3></div>
+    <div class="dlg-body">
+      <div class="fld"><label for="edName">Name</label><input id="edName" required></div>
+      <p style="font-size:0.78rem;color:var(--text-mid);margin:0">
+        Attendance starts counting once they run the tracker app on their laptop.
+      </p>
+      <div class="dlg-foot">
+        <button class="btn ghost" type="button" data-close>Cancel</button>
+        <button class="btn" type="submit">Add member</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlgInvite">
+  <div class="dlg-head"><h3>Invite editor</h3></div>
+  <div class="dlg-body" id="inviteBody"></div>
+</dialog>
+
+<script>
+/* ================= helpers ================= */
+const $ = (s, el=document) => el.querySelector(s);
+const $$ = (s, el=document) => [...el.querySelectorAll(s)];
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, opts={}) {
+  const res = await fetch('/api/console' + path, {
+    headers: {'Content-Type': 'application/json'}, ...opts,
+  });
+  if (res.status === 401) { location.href = '/login'; throw new Error('unauthenticated'); }
+  if (!res.ok) {
+    let msg = 'Something went wrong';
+    try { msg = (await res.json()).detail || msg; } catch {}
+    toast(msg, true);
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+let toastTimer;
+function toast(msg, isErr=false) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = isErr ? 'show err' : 'show';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.className = '', 2600);
+}
+
+function rupees(paise) {
+  const r = paise / 100;
+  return '₹' + r.toLocaleString('en-IN', {maximumFractionDigits: Number.isInteger(r) ? 0 : 2});
+}
+function rupeesShort(paise) {
+  const r = paise / 100;
+  if (r >= 1e7) return '₹' + (r/1e7).toFixed(1).replace(/\.0$/,'') + 'Cr';
+  if (r >= 1e5) return '₹' + (r/1e5).toFixed(1).replace(/\.0$/,'') + 'L';
+  if (r >= 1e3) return '₹' + (r/1e3).toFixed(1).replace(/\.0$/,'') + 'k';
+  return '₹' + Math.round(r);
+}
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
+  return `${String(d.getDate()).padStart(2,'0')} ${MONTHS[d.getMonth()]}`;
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso.includes('T') ? iso : iso.replace(' ', 'T'));
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+function fmtDur(sec) {
+  if (!sec) return '—';
+  const h = Math.floor(sec/3600), m = Math.round((sec%3600)/60);
+  return h ? `${h}h ${String(m).padStart(2,'0')}m` : `${m}m`;
+}
+function monthLabel(ym) { return MONTHS[+ym.slice(5,7)-1] + ' ' + ym.slice(0,4); }
+function todayISO() { return new Date().toLocaleDateString('sv-SE'); }
+
+const STATUS_LABEL = {todo:'To do', in_progress:'In progress', review:'Review', delivered:'Delivered'};
+const STATUS_PILL = {todo:'p-todo', in_progress:'p-progress', review:'p-review', delivered:'p-done'};
+const CAT_LABEL = {software:'Software & tools', salaries:'Salaries & freelancers', equipment:'Equipment', rent:'Rent & utilities', marketing:'Marketing', misc:'Misc'};
+
+/* ================= state & router ================= */
+const state = {
+  clients: [], tasks: [], team: null, ledger: null, overview: null, invites: [],
+  ledgerMonth: new Date().toISOString().slice(0,7),
+  filters: {client:'', assignee:'', status:''},
+  editTaskId: null,
+};
+
+const views = {overview: renderOverview, tasks: renderTasks, ledger: renderLedger, team: renderTeam, productivity: renderProductivity};
+
+async function route() {
+  const view = (location.hash.replace('#/','') || 'overview');
+  const fn = views[view] || views.overview;
+  $$('#nav a').forEach(a => a.classList.toggle('active', a.dataset.view === (views[view] ? view : 'overview')));
+  $('#main').innerHTML = '<div class="empty" style="padding-top:4rem">Loading…</div>';
+  try { await fn(); } catch (e) { console.error(e); }
+}
+window.addEventListener('hashchange', route);
+
+$('#logoutBtn').addEventListener('click', async () => {
+  await api('/logout', {method:'POST'});
+  location.href = '/login';
+});
+
+/* ================= overview ================= */
+async function renderOverview() {
+  const [ov, team] = await Promise.all([api('/overview'), api('/team?days=1')]);
+  state.overview = ov;
+  const today = new Date();
+  const net = ov.money.net;
+  const presentNames = team.editors.filter(e => e.present).map(e => e.name);
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div>
+        <p class="kicker">${today.toLocaleDateString('en-IN', {weekday:'long', day:'numeric', month:'long'})}</p>
+        <h1>Today at the studio</h1>
+      </div>
+      <div class="head-actions">
+        <button class="btn ghost" onclick="location.hash='#/tasks'">Go to tasks</button>
+        <button class="btn ghost" onclick="location.hash='#/ledger'">Go to expenses</button>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="tl">Present today</div>
+        <div class="tv">${ov.present}<span style="color:var(--text-low);font-size:1rem">/${ov.team_size}</span></div>
+        <div class="ts">${presentNames.length ? esc(presentNames.join(', ')) : 'No one active yet'}</div></div>
+      <div class="tile"><div class="tl">Tasks in motion</div>
+        <div class="tv">${ov.tasks.in_progress + ov.tasks.review}</div>
+        <div class="ts">${ov.tasks.in_progress} editing · ${ov.tasks.review} in review</div></div>
+      <div class="tile"><div class="tl">Overdue tasks</div>
+        <div class="tv ${ov.tasks.overdue ? 'neg' : ''}">${ov.tasks.overdue}</div>
+        <div class="ts">${ov.tasks.todo} still to start</div></div>
+      <div class="tile"><div class="tl">This month · net</div>
+        <div class="tv ${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : '−'}${rupees(Math.abs(net))}</div>
+        <div class="ts">${rupees(ov.money.income)} in · ${rupees(ov.money.expenses)} out</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Needs attention</h2><span class="meta">urgent or past due</span></div>
+      ${ov.attention.length ? `<ul class="att-list">
+        ${ov.attention.map(t => `<li>
+          <span class="prio ${t.priority}">${t.priority}</span>
+          <span>
+            <span class="cell-main">${esc(t.title)}</span>
+            <span style="color:var(--text-low)"> · ${esc(t.client_name)}</span>
+            ${t.overdue ? `<span class="pill p-overdue" style="margin-left:0.5rem"><span class="dot"></span>overdue · was due ${fmtDate(t.due_date)}</span>` : ''}
+          </span>
+          <span class="who">${esc(t.assignee_name || 'Unassigned')}</span>
+        </li>`).join('')}
+      </ul>` : `<div class="empty"><b>All clear</b>Nothing urgent, nothing overdue.</div>`}
+    </div>
+    ${ov.money.pending_invoices ? `<div class="card"><div class="card-pad" style="display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap">
+      <span style="font-size:0.88rem;color:var(--text-mid)">Invoices received &amp; awaiting payment</span>
+      <span class="mono" style="font-family:var(--mono);font-size:1.05rem;color:var(--warn)">${rupees(ov.money.pending_invoices)}</span>
+    </div></div>` : ''}
+  `;
+}
+
+/* ================= tasks ================= */
+async function loadTaskData() {
+  [state.clients, state.tasks, state.team] = await Promise.all([
+    api('/clients'), api('/tasks'), state.team ? Promise.resolve(state.team) : api('/team'),
+  ]);
+}
+
+async function renderTasks() {
+  await loadTaskData();
+  const f = state.filters;
+  const tasks = state.tasks.filter(t =>
+    (!f.client || String(t.client_id) === f.client) &&
+    (!f.assignee || t.assignee_id === f.assignee) &&
+    (!f.status || (f.status === 'overdue' ? t.overdue : t.status === f.status))
+  );
+  const byClient = {};
+  tasks.forEach(t => (byClient[t.client_name] ??= []).push(t));
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><p class="kicker">01 · Work in progress</p><h1>Tasks</h1></div>
+      <div class="head-actions">
+        <button class="btn ghost" id="btnNewClient">+ Client</button>
+        <button class="btn ghost" id="btnNewProject">+ Project</button>
+        <button class="btn" id="btnNewTask">+ New task</button>
+      </div>
+    </div>
+    <div class="filters">
+      <select id="fClient" aria-label="Filter by client">
+        <option value="">All clients</option>
+        ${state.clients.map(c => `<option value="${c.id}" ${f.client==String(c.id)?'selected':''}>${esc(c.name)}</option>`).join('')}
+      </select>
+      <select id="fAssignee" aria-label="Filter by assignee">
+        <option value="">All editors</option>
+        ${state.team.editors.map(e => `<option value="${e.id}" ${f.assignee===e.id?'selected':''}>${esc(e.name)}</option>`).join('')}
+      </select>
+      <select id="fStatus" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="todo" ${f.status==='todo'?'selected':''}>To do</option>
+        <option value="in_progress" ${f.status==='in_progress'?'selected':''}>In progress</option>
+        <option value="review" ${f.status==='review'?'selected':''}>Review</option>
+        <option value="delivered" ${f.status==='delivered'?'selected':''}>Delivered</option>
+        <option value="overdue" ${f.status==='overdue'?'selected':''}>Overdue</option>
+      </select>
+    </div>
+    <div id="taskGroups">
+      ${Object.keys(byClient).length ? Object.entries(byClient).map(([client, list]) => `
+        <div class="client-group-head">${esc(client)} <span class="cnt">· ${list.length} task${list.length>1?'s':''}</span></div>
+        <div class="card"><div class="card-body"><table>
+          <thead><tr><th>Task</th><th>Assignee</th><th>Status</th><th>Priority</th><th>Due</th><th style="width:1%"></th></tr></thead>
+          <tbody>${list.map(taskRow).join('')}</tbody>
+        </table></div></div>
+      `).join('') : `<div class="card"><div class="empty"><b>No tasks here</b>
+        ${state.clients.length ? 'Add one with “+ New task”, or clear the filters.' : 'Start by adding a client, then a project, then tasks.'}
+      </div></div>`}
+    </div>
+  `;
+
+  ['fClient','fAssignee','fStatus'].forEach(id => $('#'+id).addEventListener('change', () => {
+    state.filters = {client: $('#fClient').value, assignee: $('#fAssignee').value, status: $('#fStatus').value};
+    renderTasks();
+  }));
+  $('#btnNewTask').addEventListener('click', () => openTaskDialog());
+  $('#btnNewClient').addEventListener('click', () => $('#dlgClient').showModal());
+  $('#btnNewProject').addEventListener('click', () => { fillProjectClientSelect(); $('#dlgProject').showModal(); });
+  bindTaskRowEvents();
+}
+
+function taskRow(t) {
+  return `<tr data-id="${t.id}">
+    <td>
+      <div class="cell-main">${esc(t.title)}
+        ${t.asset_link ? ` <a href="${esc(t.asset_link)}" target="_blank" rel="noopener" title="Open footage / asset link">↗</a>` : ''}
+      </div>
+      <div class="cell-sub">${esc(t.project_name)}${t.platform ? ' · ' + esc(t.platform) : ''}</div>
+    </td>
+    <td>${esc(t.assignee_name || '—')}</td>
+    <td>
+      <select class="pill-select ${STATUS_PILL[t.status]}" data-act="status" aria-label="Task status">
+        ${Object.entries(STATUS_LABEL).map(([v,l]) => `<option value="${v}" ${t.status===v?'selected':''}>${l}</option>`).join('')}
+      </select>
+    </td>
+    <td><span class="prio ${t.priority}">${t.priority}</span></td>
+    <td class="mono ${t.overdue ? 'due-overdue' : ''}">${t.overdue ? '⚠ ' : ''}${fmtDate(t.due_date)}</td>
+    <td><div class="row-actions">
+      <button class="icon-btn" data-act="edit" title="Edit task" aria-label="Edit task">✎</button>
+      <button class="icon-btn del" data-act="del" title="Delete task" aria-label="Delete task">✕</button>
+    </div></td>
+  </tr>`;
+}
+
+function bindTaskRowEvents() {
+  $$('#taskGroups [data-act]').forEach(el => {
+    const id = +el.closest('tr').dataset.id;
+    if (el.dataset.act === 'status') {
+      el.addEventListener('change', async () => {
+        await api(`/tasks/${id}`, {method:'PATCH', body: JSON.stringify({status: el.value})});
+        el.className = `pill-select ${STATUS_PILL[el.value]}`;
+        if (el.value === 'delivered') toast('Marked delivered ✓');
+        const t = state.tasks.find(x => x.id === id); if (t) t.status = el.value;
+      });
+    } else if (el.dataset.act === 'edit') {
+      el.addEventListener('click', () => openTaskDialog(state.tasks.find(x => x.id === id)));
+    } else if (el.dataset.act === 'del') {
+      el.addEventListener('click', async () => {
+        if (!confirm('Delete this task?')) return;
+        await api(`/tasks/${id}`, {method:'DELETE'});
+        toast('Task deleted');
+        renderTasks();
+      });
+    }
+  });
+}
+
+function fillProjectSelect(sel, selectedId) {
+  sel.innerHTML = state.clients.flatMap(c =>
+    c.projects.map(p => `<option value="${p.id}" ${p.id===selectedId?'selected':''}>${esc(c.name)} — ${esc(p.name)}</option>`)
+  ).join('') || '<option value="">No projects yet — add one first</option>';
+}
+function fillProjectClientSelect() {
+  $('#pClient').innerHTML = state.clients.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+}
+function fillAssigneeSelect(sel, selectedId) {
+  sel.innerHTML = '<option value="">Unassigned</option>' +
+    state.team.editors.map(e => `<option value="${e.id}" ${e.id===selectedId?'selected':''}>${esc(e.name)}</option>`).join('');
+}
+
+function openTaskDialog(task=null) {
+  state.editTaskId = task ? task.id : null;
+  $('#dlgTaskTitle').textContent = task ? 'Edit task' : 'New task';
+  $('#dlgTaskSubmit').textContent = task ? 'Save changes' : 'Add task';
+  fillProjectSelect($('#tProject'), task?.project_id);
+  fillAssigneeSelect($('#tAssignee'), task?.assignee_id);
+  $('#tTitle').value = task?.title || '';
+  $('#tPriority').value = task?.priority || 'medium';
+  $('#tStatus').value = task?.status || 'todo';
+  $('#tDue').value = task?.due_date || '';
+  $('#tLink').value = task?.asset_link || '';
+  $('#tDesc').value = task?.description || '';
+  $('#dlgTask').showModal();
+}
+
+$('#formTask').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const body = {
+    project_id: +$('#tProject').value, title: $('#tTitle').value,
+    assignee_id: $('#tAssignee').value || null, priority: $('#tPriority').value,
+    status: $('#tStatus').value, due_date: $('#tDue').value || null,
+    asset_link: $('#tLink').value, description: $('#tDesc').value,
+  };
+  if (!body.project_id) { toast('Create a project first', true); return; }
+  if (state.editTaskId) {
+    await api(`/tasks/${state.editTaskId}`, {method:'PATCH', body: JSON.stringify(body)});
+    toast('Task updated');
+  } else {
+    await api('/tasks', {method:'POST', body: JSON.stringify(body)});
+    toast('Task added');
+  }
+  $('#dlgTask').close();
+  renderTasks();
+});
+
+$('#formClient').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('/clients', {method:'POST', body: JSON.stringify({name: $('#cName').value, contact: $('#cContact').value})});
+  $('#dlgClient').close(); $('#formClient').reset();
+  toast('Client added');
+  if (location.hash.includes('tasks')) renderTasks();
+});
+
+$('#formProject').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('/projects', {method:'POST', body: JSON.stringify({
+    client_id: +$('#pClient').value, name: $('#pName').value, platform: $('#pPlatform').value,
+  })});
+  $('#dlgProject').close(); $('#formProject').reset();
+  toast('Project added');
+  if (location.hash.includes('tasks')) renderTasks();
+});
+
+/* ================= ledger ================= */
+async function renderLedger() {
+  const [ledger, clients] = await Promise.all([
+    api('/ledger?month=' + state.ledgerMonth), state.clients.length ? Promise.resolve(state.clients) : api('/clients'),
+  ]);
+  state.ledger = ledger; state.clients = clients;
+  const s = ledger.summary;
+
+  const rows = [
+    ...ledger.income.map(i => ({...i, _type:'income', _date:i.invoice_date})),
+    ...ledger.expenses.map(e => ({...e, _type:'expense', _date:e.date})),
+  ].sort((a,b) => b._date.localeCompare(a._date));
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><p class="kicker">02 · Money in &amp; out</p><h1>Expenses &amp; income</h1></div>
+      <div class="head-actions">
+        <div class="month-nav">
+          <button id="mPrev" aria-label="Previous month">‹</button>
+          <span class="cur">${monthLabel(ledger.month)}</span>
+          <button id="mNext" aria-label="Next month">›</button>
+        </div>
+        <button class="btn ghost" id="btnNewIncome">+ Income</button>
+        <button class="btn" id="btnNewExpense">+ Expense</button>
+      </div>
+    </div>
+    <div class="tiles">
+      <div class="tile"><div class="tl">Income · ${monthLabel(ledger.month).split(' ')[0]}</div>
+        <div class="tv" style="color:var(--series-income)">${rupees(s.income)}</div></div>
+      <div class="tile"><div class="tl">Expenses · ${monthLabel(ledger.month).split(' ')[0]}</div>
+        <div class="tv" style="color:var(--series-expense)">${rupees(s.expenses)}</div></div>
+      <div class="tile"><div class="tl">Net</div>
+        <div class="tv ${s.net>=0?'pos':'neg'}">${s.net>=0?'+':'−'}${rupees(Math.abs(s.net))}</div></div>
+      <div class="tile"><div class="tl">Awaiting payment</div>
+        <div class="tv" style="color:var(--warn)">${rupees(s.pending_invoices)}</div>
+        <div class="ts">all invoices marked “received”</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Last 6 months</h2><span class="meta">invoiced vs spent</span></div>
+      <div class="legend">
+        <span><i style="background:var(--series-income)"></i>Income</span>
+        <span><i style="background:var(--series-expense)"></i>Expenses</span>
+      </div>
+      <div class="chart-wrap" id="chartWrap">
+        <svg id="chart" width="100%" height="190" role="img" aria-label="Monthly income and expenses bar chart"></svg>
+        <div class="tooltip" id="chartTip"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Ledger — ${monthLabel(ledger.month)}</h2>
+        <span class="meta">${rows.length} entr${rows.length===1?'y':'ies'}</span></div>
+      <div class="card-body">
+        ${rows.length ? `<table>
+          <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Category / status</th><th class="num">Amount</th><th style="width:1%"></th></tr></thead>
+          <tbody>${rows.map(ledgerRow).join('')}</tbody>
+        </table>` : `<div class="empty"><b>Nothing this month</b>Add an expense or an income entry above.</div>`}
+      </div>
+    </div>
+  `;
+
+  $('#mPrev').addEventListener('click', () => shiftMonth(-1));
+  $('#mNext').addEventListener('click', () => shiftMonth(1));
+  $('#btnNewExpense').addEventListener('click', () => { $('#eDate').value = todayISO(); $('#dlgExpense').showModal(); });
+  $('#btnNewIncome').addEventListener('click', () => {
+    $('#iClient').innerHTML = state.clients.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    $('#iInvDate').value = todayISO();
+    $('#dlgIncome').showModal();
+  });
+  bindLedgerRowEvents();
+  drawChart(ledger.series);
+}
+
+function shiftMonth(delta) {
+  let [y, m] = state.ledgerMonth.split('-').map(Number);
+  m += delta;
+  if (m === 0) { m = 12; y--; } if (m === 13) { m = 1; y++; }
+  state.ledgerMonth = `${y}-${String(m).padStart(2,'0')}`;
+  renderLedger();
+}
+
+function ledgerRow(r) {
+  if (r._type === 'income') {
+    const pill = r.overdue
+      ? '<span class="pill p-overdue"><span class="dot"></span>Overdue</span>'
+      : `<select class="pill-select p-${r.status}" data-act="istatus" aria-label="Invoice status">
+          <option value="draft" ${r.status==='draft'?'selected':''}>Draft</option>
+          <option value="sent" ${r.status==='sent'?'selected':''}>Received</option>
+          <option value="paid" ${r.status==='paid'?'selected':''}>Paid</option>
+        </select>`;
+    return `<tr data-id="${r.id}" data-type="income">
+      <td class="mono">${fmtDate(r._date)}</td>
+      <td><span class="pill" style="background:rgba(34,168,147,0.12);color:var(--series-income)">In</span></td>
+      <td><div class="cell-main">${esc(r.client_name)}</div>${r.description ? `<div class="cell-sub">${esc(r.description)}</div>` : ''}</td>
+      <td>${pill}${r.overdue ? `<span class="cell-sub" style="display:inline;margin-left:0.5rem">due ${fmtDate(r.due_date)} · <a href="#" data-act="markpaid">mark paid</a></span>` : ''}</td>
+      <td class="num" style="color:var(--series-income)">+${rupees(r.amount_paise)}</td>
+      <td><div class="row-actions"><button class="icon-btn del" data-act="del" title="Delete entry" aria-label="Delete entry">✕</button></div></td>
+    </tr>`;
+  }
+  return `<tr data-id="${r.id}" data-type="expense">
+    <td class="mono">${fmtDate(r._date)}</td>
+    <td><span class="pill" style="background:rgba(213,106,46,0.12);color:var(--series-expense)">Out</span></td>
+    <td><div class="cell-main">${esc(r.payee)}</div>${r.notes ? `<div class="cell-sub">${esc(r.notes)}</div>` : ''}</td>
+    <td>${esc(CAT_LABEL[r.category] || r.category)}
+      ${r.recurring ? ` <span class="pill p-recurring" title="Auto-repeats — click ✕ on the pill to stop"><span class="dot"></span>${r.recurring}</span>
+        <button class="icon-btn" data-act="stoprec" title="Stop repeating" aria-label="Stop repeating" style="font-size:0.7rem">stop</button>` : ''}
+    </td>
+    <td class="num" style="color:var(--series-expense)">−${rupees(r.amount_paise)}</td>
+    <td><div class="row-actions"><button class="icon-btn del" data-act="del" title="Delete entry" aria-label="Delete entry">✕</button></div></td>
+  </tr>`;
+}
+
+function bindLedgerRowEvents() {
+  $$('#main [data-act]').forEach(el => {
+    const tr = el.closest('tr'); if (!tr) return;
+    const id = +tr.dataset.id, type = tr.dataset.type;
+    if (el.dataset.act === 'istatus') {
+      el.addEventListener('change', async () => {
+        await api(`/income/${id}`, {method:'PATCH', body: JSON.stringify({status: el.value})});
+        toast(el.value === 'paid' ? 'Marked paid ✓' : 'Invoice updated');
+        renderLedger();
+      });
+    } else if (el.dataset.act === 'markpaid') {
+      el.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await api(`/income/${id}`, {method:'PATCH', body: JSON.stringify({status: 'paid'})});
+        toast('Marked paid ✓'); renderLedger();
+      });
+    } else if (el.dataset.act === 'stoprec') {
+      el.addEventListener('click', async () => {
+        if (!confirm('Stop this recurring expense? Existing entries stay.')) return;
+        await api(`/expenses/${id}/stop-recurring`, {method:'POST'});
+        toast('Recurring stopped'); renderLedger();
+      });
+    } else if (el.dataset.act === 'del') {
+      el.addEventListener('click', async () => {
+        if (!confirm('Delete this entry?')) return;
+        await api(`/${type === 'income' ? 'income' : 'expenses'}/${id}`, {method:'DELETE'});
+        toast('Entry deleted'); renderLedger();
+      });
+    }
+  });
+}
+
+$('#formExpense').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('/expenses', {method:'POST', body: JSON.stringify({
+    payee: $('#ePayee').value, amount_paise: Math.round(+$('#eAmount').value * 100),
+    date: $('#eDate').value, category: $('#eCategory').value,
+    recurring: $('#eRecurring').value || null, notes: $('#eNotes').value,
+  })});
+  $('#dlgExpense').close(); $('#formExpense').reset();
+  toast('Expense added'); renderLedger();
+});
+
+$('#formIncome').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('/income', {method:'POST', body: JSON.stringify({
+    client_id: +$('#iClient').value, description: $('#iDesc').value,
+    amount_paise: Math.round(+$('#iAmount').value * 100),
+    invoice_date: $('#iInvDate').value, due_date: $('#iDueDate').value || null,
+    status: $('#iStatus').value,
+  })});
+  $('#dlgIncome').close(); $('#formIncome').reset();
+  toast('Income added'); renderLedger();
+});
+
+/* ---- chart: grouped bars, 2 series ---- */
+function drawChart(series) {
+  const svg = $('#chart'), wrap = $('#chartWrap'), tip = $('#chartTip');
+  const W = wrap.clientWidth - 34, H = 190, padL = 44, padB = 22, padT = 8;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  const max = Math.max(1, ...series.flatMap(s => [s.income, s.expenses]));
+  const niceMax = max * 1.12;
+  const plotH = H - padB - padT, plotW = W - padL - 8;
+  const groupW = plotW / series.length;
+  const barW = Math.min(26, groupW * 0.28);
+
+  const y = v => padT + plotH * (1 - v / niceMax);
+  let g = '';
+
+  // gridlines + y labels
+  for (let i = 0; i <= 3; i++) {
+    const v = niceMax * i / 3, yy = y(v);
+    g += `<line x1="${padL}" x2="${W-4}" y1="${yy}" y2="${yy}" stroke="#2c333a" stroke-width="1"/>`;
+    g += `<text x="${padL-8}" y="${yy+3}" text-anchor="end" font-size="9.5" fill="#5f6870" font-family="ui-monospace,monospace">${rupeesShort(v)}</text>`;
+  }
+
+  const bar = (x, v, color) => {
+    const h = Math.max(v > 0 ? 2 : 0, plotH * v / niceMax);
+    const yy = padT + plotH - h, r = Math.min(3.5, h/2, barW/2);
+    if (!h) return '';
+    return `<path d="M${x},${yy+h} L${x},${yy+r} Q${x},${yy} ${x+r},${yy} L${x+barW-r},${yy} Q${x+barW},${yy} ${x+barW},${yy+r} L${x+barW},${yy+h} Z" fill="${color}"/>`;
+  };
+
+  series.forEach((s, i) => {
+    const cx = padL + groupW * i + groupW / 2;
+    g += bar(cx - barW - 1, s.income, 'var(--series-income)');
+    g += bar(cx + 1, s.expenses, 'var(--series-expense)');
+    g += `<text x="${cx}" y="${H-6}" text-anchor="middle" font-size="9.5" fill="#98a1ab" font-family="ui-monospace,monospace">${MONTHS[+s.month.slice(5,7)-1]}</text>`;
+    g += `<rect data-i="${i}" x="${padL + groupW*i}" y="${padT}" width="${groupW}" height="${plotH}" fill="transparent" style="cursor:default"/>`;
+  });
+  g += `<line x1="${padL}" x2="${W-4}" y1="${padT+plotH}" y2="${padT+plotH}" stroke="#3a424b" stroke-width="1"/>`;
+  svg.innerHTML = g;
+
+  svg.addEventListener('mousemove', (e) => {
+    const t = e.target.closest('rect[data-i]');
+    if (!t) { tip.style.display = 'none'; return; }
+    const s = series[+t.dataset.i];
+    tip.innerHTML = `<div class="tt-m">${monthLabel(s.month)}</div>
+      <div class="tt-r"><span><i style="background:var(--series-income)"></i>Income</span><b>${rupees(s.income)}</b></div>
+      <div class="tt-r"><span><i style="background:var(--series-expense)"></i>Expenses</span><b>${rupees(s.expenses)}</b></div>`;
+    tip.style.display = 'block';
+    const wr = wrap.getBoundingClientRect();
+    let tx = e.clientX - wr.left + 14, ty = e.clientY - wr.top - 10;
+    if (tx + tip.offsetWidth > wr.width - 8) tx -= tip.offsetWidth + 26;
+    tip.style.left = tx + 'px'; tip.style.top = ty + 'px';
+  });
+  svg.addEventListener('mouseleave', () => tip.style.display = 'none');
+}
+
+/* ================= team ================= */
+function accessCell(e) {
+  const inv = state.invites.find(i => i.editor_id === e.id && i.status !== 'revoked');
+  if (!inv) {
+    return `<span class="pill p-todo">Not invited</span>
+      <button class="icon-btn" data-act="invite" title="Generate install link" aria-label="Generate install link">+ link</button>`;
+  }
+  if (inv.status === 'activated') {
+    return `<span class="pill p-present"><span class="dot"></span>Installed</span>`;
+  }
+  return `<span class="pill p-review">Invite sent</span>
+    <button class="icon-btn" data-act="copylink" data-token="${esc(inv.token)}" title="Copy install link" aria-label="Copy install link">copy link</button>`;
+}
+
+async function renderTeam() {
+  const [team, invites] = await Promise.all([api('/team?days=14'), api('/invites')]);
+  state.team = team;
+  state.invites = invites;
+  const dayList = team.days;
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><p class="kicker">03 · Who's working</p><h1>Team &amp; attendance</h1></div>
+      <div class="head-actions">
+        <button class="btn ghost" id="btnInviteEditor">Invite editor</button>
+        <button class="btn" id="btnNewEditor">+ Team member</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Today</h2>
+        <span class="meta">present = ${team.threshold_minutes}+ min active on tracker</span></div>
+      <div class="card-body">
+        ${team.editors.length ? `<table>
+          <thead><tr><th>Editor</th><th>Today</th><th>Live</th><th>First seen</th><th>Last activity</th>
+            <th class="num">Active</th><th class="num">Idle</th><th>Install</th><th style="width:1%"></th></tr></thead>
+          <tbody>${team.editors.map(e => `<tr data-id="${esc(e.id)}">
+            <td class="cell-main">${esc(e.name)}</td>
+            <td>${e.present
+              ? '<span class="pill p-present"><span class="dot"></span>Present</span>'
+              : (e.active_seconds ? '<span class="pill p-review"><span class="dot"></span>Under ' + team.threshold_minutes + 'm</span>'
+                                  : '<span class="pill p-absent"><span class="dot"></span>No activity</span>')}</td>
+            <td>${e.status === 'online'
+              ? '<span class="pill p-online"><span class="dot"></span>Online now</span>'
+              : '<span class="pill p-offline"><span class="dot"></span>Offline</span>'}</td>
+            <td class="mono">${fmtTime(e.first_seen)}</td>
+            <td class="mono">${fmtTime(e.last_seen_activity)}</td>
+            <td class="num">${fmtDur(e.active_seconds)}</td>
+            <td class="num">${fmtDur(e.idle_seconds)}</td>
+            <td>${accessCell(e)}</td>
+            <td><div class="row-actions"><button class="icon-btn del" data-act="deled" title="Remove from team" aria-label="Remove from team">✕</button></div></td>
+          </tr>`).join('')}</tbody>
+        </table>` : `<div class="empty"><b>No team members yet</b>Add one, then install the tracker on their laptop.</div>`}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Last 14 days</h2>
+        <span class="meta">${fmtDate(dayList[0])} – ${fmtDate(dayList[dayList.length-1])}</span></div>
+      <div class="card-body">
+        <table class="pgrid" style="min-width:420px">
+          <tbody>${team.editors.map(e => `<tr>
+            <td class="cell-main" style="width:9rem">${esc(e.name)}</td>
+            <td><div class="pdots">${e.history.map((h,i) =>
+              `<span class="pdot ${h.present?'on':''} ${i===e.history.length-1?'today':''}" title="${fmtDate(h.date)}: ${h.present?'present':'absent'}"></span>`
+            ).join('')}</div></td>
+            <td class="num" style="width:6rem">${e.history.filter(h=>h.present).length}/${e.history.length}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>
+    </div>
+    <p style="color:var(--text-low);font-size:0.8rem;max-width:60ch">
+      Attendance is read automatically from the tracker app — first heartbeat of the day counts as arrival,
+      and anyone with ${team.threshold_minutes}+ minutes of active (non-idle) time is marked present. No clock-in needed.
+    </p>
+  `;
+
+  $('#btnNewEditor').addEventListener('click', () => $('#dlgEditor').showModal());
+  $('#btnInviteEditor').addEventListener('click', () => openInviteDialog());
+  $$('#main [data-act="deled"]').forEach(btn => btn.addEventListener('click', async () => {
+    const tr = btn.closest('tr');
+    if (!confirm('Remove this team member? Their past activity stays in the database.')) return;
+    await api(`/editors/${tr.dataset.id}`, {method:'DELETE'});
+    toast('Team member removed'); state.team = null; renderTeam();
+  }));
+  $$('#main [data-act="invite"]').forEach(btn => btn.addEventListener('click', () => {
+    openInviteDialog(btn.closest('tr').dataset.id);
+  }));
+  $$('#main [data-act="copylink"]').forEach(btn => btn.addEventListener('click', async () => {
+    const url = location.origin + '/download/' + btn.dataset.token;
+    try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+    catch { toast(url); }
+  }));
+}
+
+$('#formEditor').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await api('/editors', {method:'POST', body: JSON.stringify({name: $('#edName').value})});
+  $('#dlgEditor').close(); $('#formEditor').reset();
+  toast('Team member added'); state.team = null;
+  if (location.hash.includes('team')) renderTeam(); else if (location.hash.includes('tasks')) renderTasks();
+});
+
+/* ---- invite dialog ---- */
+function bindDialogClose(container) {
+  $$('[data-close]', container).forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+}
+
+function inviteFormHTML() {
+  return `
+    <div class="fld"><label for="invName">Editor name</label><input id="invName" required></div>
+    <p style="font-size:0.78rem;color:var(--text-mid);margin:0">
+      Generates a one-time download link for the tracker app. Send it to the editor —
+      running it installs silently, no setup needed on their end.
+    </p>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="button" id="invGenerateBtn">Generate link</button>
+    </div>`;
+}
+
+function inviteResultHTML(url) {
+  return `
+    <div class="fld"><label for="invLink">Download link</label><input id="invLink" readonly value="${esc(url)}"></div>
+    <p style="font-size:0.78rem;color:var(--text-mid);margin:0">
+      Send this link to the editor. It's tied to them specifically — opening it downloads a ready-to-run installer.
+    </p>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Done</button>
+      <button class="btn" type="button" id="invCopyBtn">Copy link</button>
+    </div>`;
+}
+
+function inviteLoadingHTML() {
+  return `<div class="empty" style="padding:1rem 0">Generating link…</div>`;
+}
+
+async function openInviteDialog(editorId=null) {
+  const body = $('#inviteBody');
+  const dlg = $('#dlgInvite');
+
+  if (editorId) {
+    body.innerHTML = inviteLoadingHTML();
+    dlg.showModal();
+    try {
+      const r = await api('/invites', {method:'POST', body: JSON.stringify({editor_id: editorId})});
+      body.innerHTML = inviteResultHTML(location.origin + r.download_path);
+      bindDialogClose(body);
+      $('#invCopyBtn').addEventListener('click', () => copyInviteLink());
+      state.invites = [];
+    } catch (e) { dlg.close(); }
+    return;
+  }
+
+  body.innerHTML = inviteFormHTML();
+  bindDialogClose(body);
+  dlg.showModal();
+  $('#invGenerateBtn').addEventListener('click', async () => {
+    const name = $('#invName').value.trim();
+    if (!name) { toast('Name is required', true); return; }
+    body.innerHTML = inviteLoadingHTML();
+    try {
+      const r = await api('/invites', {method:'POST', body: JSON.stringify({name})});
+      body.innerHTML = inviteResultHTML(location.origin + r.download_path);
+      bindDialogClose(body);
+      $('#invCopyBtn').addEventListener('click', () => copyInviteLink());
+      toast('Team member added');
+    } catch (e) { dlg.close(); }
+  });
+}
+
+async function copyInviteLink() {
+  const input = $('#invLink');
+  try { await navigator.clipboard.writeText(input.value); toast('Link copied'); }
+  catch { input.select(); toast('Select and copy the link above'); }
+}
+
+$('#dlgInvite').addEventListener('close', () => {
+  state.team = null; state.invites = [];
+  if (location.hash.includes('team')) renderTeam();
+});
+
+/* ================= productivity ================= */
+const PRODUCTIVITY_LABEL = {editing:'Editing', browser:'Browser', communication:'Communication', other:'Other'};
+const PRODUCTIVITY_COLOR = {editing:'var(--teal)', browser:'var(--warn)', communication:'var(--series-expense)', other:'var(--text-low)'};
+
+async function renderProductivity() {
+  const prod = await api('/productivity?days=14');
+  const totalSeconds = Object.values(prod.totals).reduce((a,b) => a+b, 0);
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><p class="kicker">04 · Where time goes</p><h1>Productivity</h1></div>
+    </div>
+    <div class="tiles">
+      ${Object.entries(PRODUCTIVITY_LABEL).map(([key,label]) => `
+        <div class="tile"><div class="tl">${label}</div>
+          <div class="tv" style="color:${PRODUCTIVITY_COLOR[key]}">${fmtDur(prod.totals[key] || 0)}</div>
+          <div class="ts">${totalSeconds ? Math.round(100 * (prod.totals[key] || 0) / totalSeconds) : 0}% of active time</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>By editor</h2><span class="meta">last ${prod.days} days, active time only</span></div>
+      <div class="card-body">
+        ${prod.by_editor.length ? `<table>
+          <thead><tr><th>Editor</th>${Object.values(PRODUCTIVITY_LABEL).map(l => `<th class="num">${l}</th>`).join('')}</tr></thead>
+          <tbody>${prod.by_editor.map(e => `<tr>
+            <td class="cell-main">${esc(e.name)}</td>
+            ${Object.keys(PRODUCTIVITY_LABEL).map(k => `<td class="num">${fmtDur(e.categories[k] || 0)}</td>`).join('')}
+          </tr>`).join('')}</tbody>
+        </table>` : `<div class="empty"><b>No data yet</b>Once editors have been active, their time breakdown shows up here.</div>`}
+      </div>
+    </div>
+  `;
+}
+
+/* dialogs: cancel buttons */
+$$('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+
+route();
+</script>
+</body>
+</html>

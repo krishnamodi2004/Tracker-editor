@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, get_db
-from auth import is_valid_session, require_admin, require_editor, COOKIE_NAME
+from auth import is_valid_session, require_editor, COOKIE_NAME
 from console_api import router as console_auth_router, protected as console_router
 
 app = FastAPI(title="Editor Tracker Server")
@@ -144,7 +144,7 @@ async def upload_screenshot(
 
 
 @app.get("/api/screenshot/{filename}")
-def get_screenshot(filename: str, _admin=Depends(require_admin)):
+def get_screenshot(filename: str):
     filepath = os.path.join(SCREENSHOT_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(404, "Screenshot not found")

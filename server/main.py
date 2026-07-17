@@ -1,14 +1,13 @@
-import os
-import uuid
 import json
+import os
 from datetime import datetime, timedelta
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi import Depends, FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import init_db, get_db
-from auth import is_valid_session, COOKIE_NAME
+from auth import is_valid_session, require_admin, require_editor, COOKIE_NAME
 from console_api import router as console_auth_router, protected as console_router
 
 app = FastAPI(title="Editor Tracker Server")
@@ -16,7 +15,22 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 SCREENSHOT_DIR = os.path.join(os.path.dirname(__file__), "screenshots")
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
+BUILD_DIR = os.path.join(os.path.dirname(__file__), "build")
+UPDATES_DIR = os.path.join(os.path.dirname(__file__), "updates")
+TEMPLATE_EXE_PATH = os.path.join(BUILD_DIR, "EditorTracker.exe")
+VERSION_FILE_PATH = os.path.join(os.path.dirname(__file__), "version.json")
+
+# Must match tracker/config.py's TOKEN_MARKER/PLACEHOLDER_TOKEN exactly -- the
+# packaging step appends TOKEN_MARKER + a 64-char placeholder as a raw trailer
+# after the exe's own content (PyInstaller's archive is zlib-compressed, so a
+# token embedded as a plain string literal can't be found by byte search).
+TOKEN_MARKER = b"EDITORTRACKER_TOKEN_V1:"
+PLACEHOLDER_TOKEN = b"0" * 64
+TRAILER_LEN = len(TOKEN_MARKER) + len(PLACEHOLDER_TOKEN)
+PLACEHOLDER_TRAILER = TOKEN_MARKER + PLACEHOLDER_TOKEN
+
 os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+os.makedirs(UPDATES_DIR, exist_ok=True)
 
 init_db()
 
@@ -39,20 +53,36 @@ def login_page(request: Request):
 
 
 @app.post("/api/register")
-def register_editor(name: str = Form(...)):
-    editor_id = str(uuid.uuid4())[:8]
+def register_editor(token: str = Form(...)):
     db = get_db()
+    row = db.execute(
+        "SELECT editor_id, status FROM invites WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(404, "Invalid invite token")
+    if row["status"] == "revoked":
+        db.close()
+        raise HTTPException(403, "Invite has been revoked")
+
+    editor_id = row["editor_id"]
+    now = datetime.utcnow().isoformat()
+    if row["status"] != "activated":
+        db.execute(
+            "UPDATE invites SET status = 'activated', activated_at = ? WHERE token = ?",
+            (now, token),
+        )
     db.execute(
-        "INSERT INTO editors (id, name, last_seen, status) VALUES (?, ?, ?, ?)",
-        (editor_id, name, datetime.utcnow().isoformat(), "online"),
+        "UPDATE editors SET last_seen = ?, status = 'online' WHERE id = ?",
+        (now, editor_id),
     )
     db.commit()
     db.close()
-    return {"editor_id": editor_id, "name": name}
+    return {"editor_id": editor_id, "token": token}
 
 
 @app.post("/api/heartbeat")
-def heartbeat(editor_id: str = Form(...)):
+def heartbeat(editor_id: str = Depends(require_editor)):
     db = get_db()
     db.execute(
         "UPDATE editors SET last_seen = ?, status = 'online' WHERE id = ?",
@@ -65,12 +95,12 @@ def heartbeat(editor_id: str = Form(...)):
 
 @app.post("/api/activity")
 def log_activity(
-    editor_id: str = Form(...),
     app_name: str = Form(...),
     window_title: str = Form(""),
     start_time: str = Form(...),
     duration_seconds: int = Form(0),
     is_idle: int = Form(0),
+    editor_id: str = Depends(require_editor),
 ):
     db = get_db()
     db.execute(
@@ -88,8 +118,8 @@ def log_activity(
 
 @app.post("/api/screenshot")
 async def upload_screenshot(
-    editor_id: str = Form(...),
     file: UploadFile = File(...),
+    editor_id: str = Depends(require_editor),
 ):
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"{editor_id}_{timestamp}.jpg"
@@ -114,11 +144,66 @@ async def upload_screenshot(
 
 
 @app.get("/api/screenshot/{filename}")
-def get_screenshot(filename: str):
+def get_screenshot(filename: str, _admin=Depends(require_admin)):
     filepath = os.path.join(SCREENSHOT_DIR, filename)
     if not os.path.exists(filepath):
         raise HTTPException(404, "Screenshot not found")
     return FileResponse(filepath, media_type="image/jpeg")
+
+
+@app.get("/download/{token}")
+def download_installer(token: str):
+    db = get_db()
+    row = db.execute(
+        "SELECT status FROM invites WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(404, "Invalid invite link")
+    if row["status"] == "revoked":
+        db.close()
+        raise HTTPException(410, "This invite link has been revoked")
+    if not os.path.exists(TEMPLATE_EXE_PATH):
+        db.close()
+        raise HTTPException(503, "Installer build not available yet")
+
+    with open(TEMPLATE_EXE_PATH, "rb") as f:
+        data = f.read()
+    if data[-TRAILER_LEN:] != PLACEHOLDER_TRAILER:
+        db.close()
+        raise HTTPException(500, "Installer template is not built correctly")
+    personalized = data[:-len(PLACEHOLDER_TOKEN)] + token.encode("ascii")
+
+    if row["status"] == "pending":
+        db.execute(
+            "UPDATE invites SET status = 'downloaded', downloaded_at = ? WHERE token = ?",
+            (datetime.utcnow().isoformat(), token),
+        )
+        db.commit()
+    db.close()
+
+    return Response(
+        content=personalized,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="EditorTrackerSetup.exe"'},
+    )
+
+
+@app.get("/api/version")
+def get_version():
+    if not os.path.exists(VERSION_FILE_PATH):
+        raise HTTPException(404, "No release published yet")
+    with open(VERSION_FILE_PATH) as f:
+        info = json.load(f)
+    return {"version": info["version"], "download_url": f"/updates/{info['filename']}"}
+
+
+@app.get("/updates/{filename}")
+def download_update(filename: str):
+    filepath = os.path.join(UPDATES_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(404, "Update not found")
+    return FileResponse(filepath, media_type="application/octet-stream")
 
 
 @app.get("/api/editors")

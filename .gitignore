@@ -3,3 +3,9 @@ __pycache__/
 *.db
 server/screenshots/
 server/.console_secret
+.venv/
+tracker/.venv-build/
+tracker/build_tmp/
+server/build/
+server/updates/
+server/version.json

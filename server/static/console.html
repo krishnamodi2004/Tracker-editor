@@ -259,6 +259,7 @@
       <a href="#/tasks" data-view="tasks"><span class="nv">01</span>Tasks</a>
       <a href="#/ledger" data-view="ledger"><span class="nv">02</span>Expenses</a>
       <a href="#/team" data-view="team"><span class="nv">03</span>Team</a>
+      <a href="#/productivity" data-view="productivity"><span class="nv">04</span>Productivity</a>
     </nav>
     <div class="side-foot"><button id="logoutBtn" type="button">Sign out</button></div>
   </aside>
@@ -411,6 +412,11 @@
   </form>
 </dialog>
 
+<dialog id="dlgInvite">
+  <div class="dlg-head"><h3>Invite editor</h3></div>
+  <div class="dlg-body" id="inviteBody"></div>
+</dialog>
+
 <script>
 /* ================= helpers ================= */
 const $ = (s, el=document) => el.querySelector(s);
@@ -476,13 +482,13 @@ const CAT_LABEL = {software:'Software & tools', salaries:'Salaries & freelancers
 
 /* ================= state & router ================= */
 const state = {
-  clients: [], tasks: [], team: null, ledger: null, overview: null,
+  clients: [], tasks: [], team: null, ledger: null, overview: null, invites: [],
   ledgerMonth: new Date().toISOString().slice(0,7),
   filters: {client:'', assignee:'', status:''},
   editTaskId: null,
 };
 
-const views = {overview: renderOverview, tasks: renderTasks, ledger: renderLedger, team: renderTeam};
+const views = {overview: renderOverview, tasks: renderTasks, ledger: renderLedger, team: renderTeam, productivity: renderProductivity};
 
 async function route() {
   const view = (location.hash.replace('#/','') || 'overview');
@@ -953,15 +959,32 @@ function drawChart(series) {
 }
 
 /* ================= team ================= */
+function accessCell(e) {
+  const inv = state.invites.find(i => i.editor_id === e.id && i.status !== 'revoked');
+  if (!inv) {
+    return `<span class="pill p-todo">Not invited</span>
+      <button class="icon-btn" data-act="invite" title="Generate install link" aria-label="Generate install link">+ link</button>`;
+  }
+  if (inv.status === 'activated') {
+    return `<span class="pill p-present"><span class="dot"></span>Installed</span>`;
+  }
+  return `<span class="pill p-review">Invite sent</span>
+    <button class="icon-btn" data-act="copylink" data-token="${esc(inv.token)}" title="Copy install link" aria-label="Copy install link">copy link</button>`;
+}
+
 async function renderTeam() {
-  const team = await api('/team?days=14');
+  const [team, invites] = await Promise.all([api('/team?days=14'), api('/invites')]);
   state.team = team;
+  state.invites = invites;
   const dayList = team.days;
 
   $('#main').innerHTML = `
     <div class="page-head">
       <div><p class="kicker">03 · Who's working</p><h1>Team &amp; attendance</h1></div>
-      <div class="head-actions"><button class="btn" id="btnNewEditor">+ Team member</button></div>
+      <div class="head-actions">
+        <button class="btn ghost" id="btnInviteEditor">Invite editor</button>
+        <button class="btn" id="btnNewEditor">+ Team member</button>
+      </div>
     </div>
     <div class="card">
       <div class="card-head"><h2>Today</h2>
@@ -969,7 +992,7 @@ async function renderTeam() {
       <div class="card-body">
         ${team.editors.length ? `<table>
           <thead><tr><th>Editor</th><th>Today</th><th>Live</th><th>First seen</th><th>Last activity</th>
-            <th class="num">Active</th><th class="num">Idle</th><th style="width:1%"></th></tr></thead>
+            <th class="num">Active</th><th class="num">Idle</th><th>Install</th><th style="width:1%"></th></tr></thead>
           <tbody>${team.editors.map(e => `<tr data-id="${esc(e.id)}">
             <td class="cell-main">${esc(e.name)}</td>
             <td>${e.present
@@ -983,6 +1006,7 @@ async function renderTeam() {
             <td class="mono">${fmtTime(e.last_seen_activity)}</td>
             <td class="num">${fmtDur(e.active_seconds)}</td>
             <td class="num">${fmtDur(e.idle_seconds)}</td>
+            <td>${accessCell(e)}</td>
             <td><div class="row-actions"><button class="icon-btn del" data-act="deled" title="Remove from team" aria-label="Remove from team">✕</button></div></td>
           </tr>`).join('')}</tbody>
         </table>` : `<div class="empty"><b>No team members yet</b>Add one, then install the tracker on their laptop.</div>`}
@@ -1010,11 +1034,20 @@ async function renderTeam() {
   `;
 
   $('#btnNewEditor').addEventListener('click', () => $('#dlgEditor').showModal());
+  $('#btnInviteEditor').addEventListener('click', () => openInviteDialog());
   $$('#main [data-act="deled"]').forEach(btn => btn.addEventListener('click', async () => {
     const tr = btn.closest('tr');
     if (!confirm('Remove this team member? Their past activity stays in the database.')) return;
     await api(`/editors/${tr.dataset.id}`, {method:'DELETE'});
     toast('Team member removed'); state.team = null; renderTeam();
+  }));
+  $$('#main [data-act="invite"]').forEach(btn => btn.addEventListener('click', () => {
+    openInviteDialog(btn.closest('tr').dataset.id);
+  }));
+  $$('#main [data-act="copylink"]').forEach(btn => btn.addEventListener('click', async () => {
+    const url = location.origin + '/download/' + btn.dataset.token;
+    try { await navigator.clipboard.writeText(url); toast('Link copied'); }
+    catch { toast(url); }
   }));
 }
 
@@ -1025,6 +1058,120 @@ $('#formEditor').addEventListener('submit', async (e) => {
   toast('Team member added'); state.team = null;
   if (location.hash.includes('team')) renderTeam(); else if (location.hash.includes('tasks')) renderTasks();
 });
+
+/* ---- invite dialog ---- */
+function bindDialogClose(container) {
+  $$('[data-close]', container).forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+}
+
+function inviteFormHTML() {
+  return `
+    <div class="fld"><label for="invName">Editor name</label><input id="invName" required></div>
+    <p style="font-size:0.78rem;color:var(--text-mid);margin:0">
+      Generates a one-time download link for the tracker app. Send it to the editor —
+      running it installs silently, no setup needed on their end.
+    </p>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Cancel</button>
+      <button class="btn" type="button" id="invGenerateBtn">Generate link</button>
+    </div>`;
+}
+
+function inviteResultHTML(url) {
+  return `
+    <div class="fld"><label for="invLink">Download link</label><input id="invLink" readonly value="${esc(url)}"></div>
+    <p style="font-size:0.78rem;color:var(--text-mid);margin:0">
+      Send this link to the editor. It's tied to them specifically — opening it downloads a ready-to-run installer.
+    </p>
+    <div class="dlg-foot">
+      <button class="btn ghost" type="button" data-close>Done</button>
+      <button class="btn" type="button" id="invCopyBtn">Copy link</button>
+    </div>`;
+}
+
+function inviteLoadingHTML() {
+  return `<div class="empty" style="padding:1rem 0">Generating link…</div>`;
+}
+
+async function openInviteDialog(editorId=null) {
+  const body = $('#inviteBody');
+  const dlg = $('#dlgInvite');
+
+  if (editorId) {
+    body.innerHTML = inviteLoadingHTML();
+    dlg.showModal();
+    try {
+      const r = await api('/invites', {method:'POST', body: JSON.stringify({editor_id: editorId})});
+      body.innerHTML = inviteResultHTML(location.origin + r.download_path);
+      bindDialogClose(body);
+      $('#invCopyBtn').addEventListener('click', () => copyInviteLink());
+      state.invites = [];
+    } catch (e) { dlg.close(); }
+    return;
+  }
+
+  body.innerHTML = inviteFormHTML();
+  bindDialogClose(body);
+  dlg.showModal();
+  $('#invGenerateBtn').addEventListener('click', async () => {
+    const name = $('#invName').value.trim();
+    if (!name) { toast('Name is required', true); return; }
+    body.innerHTML = inviteLoadingHTML();
+    try {
+      const r = await api('/invites', {method:'POST', body: JSON.stringify({name})});
+      body.innerHTML = inviteResultHTML(location.origin + r.download_path);
+      bindDialogClose(body);
+      $('#invCopyBtn').addEventListener('click', () => copyInviteLink());
+      toast('Team member added');
+    } catch (e) { dlg.close(); }
+  });
+}
+
+async function copyInviteLink() {
+  const input = $('#invLink');
+  try { await navigator.clipboard.writeText(input.value); toast('Link copied'); }
+  catch { input.select(); toast('Select and copy the link above'); }
+}
+
+$('#dlgInvite').addEventListener('close', () => {
+  state.team = null; state.invites = [];
+  if (location.hash.includes('team')) renderTeam();
+});
+
+/* ================= productivity ================= */
+const PRODUCTIVITY_LABEL = {editing:'Editing', browser:'Browser', communication:'Communication', other:'Other'};
+const PRODUCTIVITY_COLOR = {editing:'var(--teal)', browser:'var(--warn)', communication:'var(--series-expense)', other:'var(--text-low)'};
+
+async function renderProductivity() {
+  const prod = await api('/productivity?days=14');
+  const totalSeconds = Object.values(prod.totals).reduce((a,b) => a+b, 0);
+
+  $('#main').innerHTML = `
+    <div class="page-head">
+      <div><p class="kicker">04 · Where time goes</p><h1>Productivity</h1></div>
+    </div>
+    <div class="tiles">
+      ${Object.entries(PRODUCTIVITY_LABEL).map(([key,label]) => `
+        <div class="tile"><div class="tl">${label}</div>
+          <div class="tv" style="color:${PRODUCTIVITY_COLOR[key]}">${fmtDur(prod.totals[key] || 0)}</div>
+          <div class="ts">${totalSeconds ? Math.round(100 * (prod.totals[key] || 0) / totalSeconds) : 0}% of active time</div>
+        </div>
+      `).join('')}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>By editor</h2><span class="meta">last ${prod.days} days, active time only</span></div>
+      <div class="card-body">
+        ${prod.by_editor.length ? `<table>
+          <thead><tr><th>Editor</th>${Object.values(PRODUCTIVITY_LABEL).map(l => `<th class="num">${l}</th>`).join('')}</tr></thead>
+          <tbody>${prod.by_editor.map(e => `<tr>
+            <td class="cell-main">${esc(e.name)}</td>
+            ${Object.keys(PRODUCTIVITY_LABEL).map(k => `<td class="num">${fmtDur(e.categories[k] || 0)}</td>`).join('')}
+          </tr>`).join('')}</tbody>
+        </table>` : `<div class="empty"><b>No data yet</b>Once editors have been active, their time breakdown shows up here.</div>`}
+      </div>
+    </div>
+  `;
+}
 
 /* dialogs: cancel buttons */
 $$('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));

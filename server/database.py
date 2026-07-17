@@ -41,9 +41,26 @@ def init_db():
             FOREIGN KEY (editor_id) REFERENCES editors(id)
         );
 
+        -- Invite tokens bind a pre-created editor row to a not-yet-installed tracker
+        -- instance. The token itself is the long-lived bearer credential the tracker
+        -- uses forever after activation -- there is no separate secret-rotation table.
+        -- To revoke, flip status to 'revoked' and issue a fresh invite for the same
+        -- editor_id; require_editor() only accepts status='activated'.
+        CREATE TABLE IF NOT EXISTS invites (
+            token TEXT PRIMARY KEY,
+            editor_id TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',     -- pending | downloaded | activated | revoked
+            created_at TEXT NOT NULL,
+            downloaded_at TEXT,
+            activated_at TEXT,
+            FOREIGN KEY (editor_id) REFERENCES editors(id)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_activity_editor ON activity_logs(editor_id);
         CREATE INDEX IF NOT EXISTS idx_activity_time ON activity_logs(start_time);
         CREATE INDEX IF NOT EXISTS idx_screenshots_editor ON screenshots(editor_id);
+        CREATE INDEX IF NOT EXISTS idx_invites_editor ON invites(editor_id);
+        CREATE INDEX IF NOT EXISTS idx_invites_status ON invites(status);
 
         -- Studio Console tables --
 

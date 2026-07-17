@@ -4,6 +4,7 @@ All routes here require the admin session cookie. Money is integer paise.
 """
 import calendar
 import os
+import secrets
 import uuid
 from datetime import datetime, date, timedelta
 
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from database import get_db
 from auth import require_admin, check_password, make_session_token, COOKIE_NAME, SESSION_DAYS
+from categories import categorize
 
 router = APIRouter(prefix="/api/console")
 protected = APIRouter(prefix="/api/console", dependencies=[Depends(require_admin)])
@@ -582,6 +584,113 @@ def delete_editor(editor_id: str):
     db.commit()
     db.close()
     return {"ok": True}
+
+
+# ---------- invites ----------
+
+class InviteBody(BaseModel):
+    name: str | None = None        # create a new editor + invite together
+    editor_id: str | None = None   # invite an existing editor who has none yet
+
+
+@protected.get("/invites")
+def list_invites():
+    db = get_db()
+    rows = db.execute(
+        """SELECT i.*, e.name AS editor_name FROM invites i
+           JOIN editors e ON e.id = i.editor_id ORDER BY i.created_at DESC"""
+    ).fetchall()
+    db.close()
+    return [dict(r) for r in rows]
+
+
+@protected.post("/invites")
+def create_invite(body: InviteBody):
+    if not body.name and not body.editor_id:
+        raise HTTPException(400, "Provide either name or editor_id")
+    if body.name and body.editor_id:
+        raise HTTPException(400, "Provide only one of name or editor_id")
+
+    db = get_db()
+    now = datetime.utcnow().isoformat()
+
+    if body.name:
+        if not body.name.strip():
+            db.close()
+            raise HTTPException(400, "Name is required")
+        editor_id = str(uuid.uuid4())[:8]
+        db.execute(
+            "INSERT INTO editors (id, name, last_seen, status) VALUES (?, ?, NULL, 'offline')",
+            (editor_id, body.name.strip()),
+        )
+    else:
+        editor_id = body.editor_id
+        row = db.execute("SELECT id FROM editors WHERE id = ?", (editor_id,)).fetchone()
+        if not row:
+            db.close()
+            raise HTTPException(404, "Editor not found")
+
+    token = secrets.token_hex(32)
+    db.execute(
+        "INSERT INTO invites (token, editor_id, status, created_at) VALUES (?, ?, 'pending', ?)",
+        (token, editor_id, now),
+    )
+    db.commit()
+    db.close()
+    return {"editor_id": editor_id, "token": token, "download_path": f"/download/{token}"}
+
+
+@protected.post("/invites/{token}/revoke")
+def revoke_invite(token: str):
+    db = get_db()
+    row = db.execute("SELECT token FROM invites WHERE token = ?", (token,)).fetchone()
+    if not row:
+        db.close()
+        raise HTTPException(404, "Invite not found")
+    db.execute("UPDATE invites SET status = 'revoked' WHERE token = ?", (token,))
+    db.commit()
+    db.close()
+    return {"ok": True}
+
+
+# ---------- productivity (dashboard-only breakdown, no client changes) ----------
+
+@protected.get("/productivity")
+def get_productivity(days: int = 14, editor_id: str | None = None):
+    days = max(1, min(days, 90))
+    since = (date.today() - timedelta(days=days - 1)).isoformat()
+
+    db = get_db()
+    where = "WHERE substr(start_time, 1, 10) >= ? AND is_idle = 0"
+    params = [since]
+    if editor_id:
+        where += " AND editor_id = ?"
+        params.append(editor_id)
+
+    rows = db.execute(
+        f"""SELECT editor_id, app_name, SUM(duration_seconds) AS seconds
+            FROM activity_logs {where} GROUP BY editor_id, app_name""",
+        params,
+    ).fetchall()
+    names = {r["id"]: r["name"] for r in db.execute("SELECT id, name FROM editors").fetchall()}
+    db.close()
+
+    per_editor: dict[str, dict[str, int]] = {}
+    totals: dict[str, int] = {}
+    for r in rows:
+        cat = categorize(r["app_name"])
+        per_editor.setdefault(r["editor_id"], {}).setdefault(cat, 0)
+        per_editor[r["editor_id"]][cat] += r["seconds"]
+        totals[cat] = totals.get(cat, 0) + r["seconds"]
+
+    return {
+        "days": days,
+        "totals": totals,
+        "by_editor": [
+            {"editor_id": eid, "name": names.get(eid, eid), "categories": cats}
+            for eid, cats in per_editor.items()
+        ],
+    }
 
 
 # ---------- overview ----------
